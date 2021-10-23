@@ -8,5 +8,7 @@ bool uploadfile(struct Client* client, struct FileInfo* file);
 
 void splitpath(char *path, char *drive, char *dir, char *filename);
 
-bool connectDataSocket(struct Client* client);
+bool buildPortConnetion(struct Client* client);
+
+bool buildPasvConnection(struct  Client* client);
 #endif

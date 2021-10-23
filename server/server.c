@@ -89,6 +89,7 @@ void recieveCommand(int serfd)
 {   
 	while (true) {	
 		struct Client client;
+		initClient(&client);
 		//提取出所监听套接字的等待连接队列中第一个连接请求，创建一个新的套接字(之后可以直接用这个进行收发），并返回指向该套接字的文件描述符
         if((client.controlfd = accept(serfd, NULL, NULL)) == -1) //成功时，返回非负整数，该整数是接收到套接字的描述符；出错时，返回－1，相应地设定全局变量errno
 	    {
@@ -157,5 +158,24 @@ void recieveCommand(int serfd)
     return;
 }
 
+void getLocalIp(struct Client* client)
+{
+    struct sockaddr_in serv;  
+    char serv_ip[20]; 
+    socklen_t serv_len = sizeof(serv);   
+    getsockname(client->controlfd, (struct sockaddr *)&serv, &serv_len);  
+    inet_ntop(AF_INET, &serv.sin_addr, serv_ip, sizeof(serv_ip));  
+    printf("host %s:%d\n", serv_ip, ntohs(serv.sin_port));  
+    strcpy(serverIp, serv_ip);
+    return;
+}
 
-
+void initClient(struct Client* client)
+{
+	client->dataMode = NoMode;
+	client->isSignIn = false;
+	client->isPass = false;
+	client->controlfd = -1;
+	client->datafd = -1;
+	return;
+}

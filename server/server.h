@@ -11,7 +11,9 @@ int initServer(int port);
 //接收客户端命令
 void recieveCommand(int serfd);
 
-//关闭服务器socket
+//获取服务器Ip
+void getLocalIp(struct Client* client);
 
-
+//初始化一位客户
+void initClient(struct Client* client);
 #endif

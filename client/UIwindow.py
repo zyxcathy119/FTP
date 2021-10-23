@@ -35,27 +35,32 @@ class Centralwin(QtWidgets.QMainWindow, Ui_MainWindow):
 
 class Client():
 
-    clientIP = "127.0.0.1"
+    clisock = -1
+    clientIP = ""
     clientControlPort = 8000
     clientDataPort = 8001
     clientDatafd = -1
+    dataConnectfd = -1
     clientControlfd = -1
     clientFilePath ='/home/cathy/FTPCLIENT/'    
 
-    serverControlIP = 'localhost'
-    serverControlPort = 21
+    serverControlIP = 'localhost' #服务器ip
+    serverControlPort = 21    #服务器controlport
     serverDataIP = ''
     serverDataPort = 20
 
     isSignin = False
     isPass = False
     isStop = False
+    dataMode = 0 # PORT = 1,PASV = 2
     isPasvrecieved = False #server是否发过来了Ip和port
     username = ''
     password = ''
     command = ''
     parameter = ''
     resvmsg = ''
+    code = ''
+    text = ''
     filepath = ''
     threadcount = 0
     threads = []
@@ -78,28 +83,35 @@ class Client():
 
     def initSocket(self,host, port):
         try:
-            clisock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            clisock.connect((host, port))
+            self.clientControlfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.clientControlfd.connect((host, port))
             # 收
+            t=threading.Thread(target = self.receiveResponse)
+            self.threads.append(t)
+            self.threadcount = self.threadcount+1
+            t.start()
             while True:
                 #   print(clisock.recv(size).decode())
-                if not self.isStop:
-                    self.resvmsg = clisock.recv(SIZE).decode()
-                    if not self.resvmsg:
-                        break
-                    self.dealToRecv()
-                    print(self.resvmsg)
+                # if not self.isStop:
+                    # self.resvmsg = clisock.recv(SIZE).decode()
+                    # if not self.resvmsg:
+                    #     break
+                    # self.dealToRecv()
+                    # print(self.resvmsg)
+
                     self.command = input("command: ")
                     self.parameter = input("parameter: ")
                     # self.chooseCMD.get(command)
-                    self.dealToCommand()
+                    if self.command is "PORT":
+                        self.parameter = "183,173,67,177,100,6"
                     data = self.command+' '+self.parameter + '\r\n'
-                    print(data)
-                    clisock.send(data.encode())
+                    print("send:",data)
+                    self.clientControlfd.send(data.encode())
+                    self.dealToCommand()
 
             clisock.close()
         except Exception as e:
-            clisock.send('exit\r\n'.encode())
+            self.clientControlfd.send('exit\r\n'.encode())
             print(str(e))
 #------------------------------------------------------------------------------------------------------
     # def chooseCMD(self):
@@ -124,159 +136,123 @@ class Client():
 
     def dealToRecv(self):
         rsv = self.resvmsg.split()
-        code = rsv[0]
-        text = rsv[1]
+        self.code = rsv[0]
+        self.text = rsv[1]
 
     def dealToCommand(self):
         if self.command == 'PORT':
             self.cmd_PORT()
             return
         
+        if self.command == 'PASV':
+            self.cmd_PASV()
+            return
+        
         if self.command == 'RETR':
-            self.isStop = True
             self.filepath = self.parameter
-            t=threading.Thread(target = self.cmd_RETR)
-            self.threads.append(t)
-            self.threadcount = self.threadcount+1
-            t.start()
+            self.cmd_RETR()
+            # self.threads.append(t)
+            # self.threadcount = self.threadcount+1
+            # t.start()
             return
         
         if self.command == 'STOR':
-            self.isStop = True
             self.filepath = self.parameter
-            t=threading.Thread(target = self.cmd_STOR)
-            self.threads.append(t)
-            self.threadcount = self.threadcount+1
-            t.start()            
-            return
-
-        if self.command == 'PASV':
-            self.cmd_PORT()
+            self.cmd_STOR()       
             return
 
         if self.command == 'CWD':
-            self.cmd_PORT()
+            # self.cmd_PORT()
             return
-
-    def connectToServer(self):
-        print("connectToserver begin\n")
-        host = 'localhost'
-        port = 21
-        self.username = 'anonymous'
-        self.password = 'cathy@com'
-        try:
-            # host = self.loginwin.ServerIPtext.toPlainText()
-            # port = int(self.loginwin.ServerPorttext.toPlainText())
-            # self.username = self.loginwin.Usernametext.toPlainText()
-            # self.password = self.loginwin.Passwordtext.toPlainText()
-            self.checkConnectInput()
-        except Exception as e:
-            print("exception\n")
-            QMessageBox.information(self.loginwin, 'Error', str(e), QMessageBox.Ok)
-            return
-
-        print(host,port,self.username, self.password)
-        try:
-            self.clisock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            print("socket success\n")
-            self.clisock.connect((host, port))
-            self.loginwin.close()   
-            print("connect success\n")
-            self.login()
-              
-            while True:
-                self.receiveResponse()
-
-        except:
-            print("connnect error\n")
-            QMessageBox.information(self.loginwin, 'Error', "Connection failed", QMessageBox.Ok)
-
-    def closeEvent(self):
-        self.clisock.close()
-
-    def login(self):
-        self.receiveResponse()
-        senddata =  "USER" + ' ' + self.username + '\r\n'
-        self.clisock.send(senddata.encode())
-        self.receiveResponse()
-        senddata =  "PASS" + ' ' + self.password + '\r\n'
-        self.clisock.send(senddata.encode()) 
-        self.receiveResponse()      
-
-    def checkConnectInput(self):
-        if self.username != "anonymous":
-            QMessageBox.information(self.loginwin, 'Error', "Username should be 'anonymous'!", QMessageBox.Ok)
-        if '@' not in self.password :
-            QMessageBox.information(self.loginwin, 'Error', "Password should be e-mail address!", QMessageBox.Ok)
-
-    def receiveResponse(self):
-        msg = self.clisock.recv(SIZE).decode()
-        print(msg)
-        self.centralwin.serverresponselist.addItem(msg)
-
-    def sendCommand(self):
-        self.command = self.centralwin.conmandchoose.currentText()
-        self.parameter = self.centralwin.parametertext.toPlainText()
-        self.ChooseCMD.get(self.command)
-        senddata = self.command + ' ' + self.parameter + '\r\n'
-        self.clisock.send(senddata.encode())
-    
-    def cmd_USER(self):
-        print("cmd_USER begin")
-        return
-    
-    def cmd_PASS(self):
-        return
 
     def cmd_PORT(self):
-        self.clientIP = self.get_local_ip()
-        self.clientDataPort = 25607
-        self.parameter = self.clientIP.replace('.',',')+',100,7'
-        self.clientDatafd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.clientDatafd.bind(('', self.clientDataPort))
-        self.clientDatafd.listen(10)
-        print("cmd_PORT ends\n")
+        try:
+            self.clientIP = self.get_local_ip()
+            self.clientDataPort = 25606
+            self.parameter = self.clientIP.replace('.',',')+',100,6' #把客户端ip发给服务器
+            self.clientDatafd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.clientDatafd.bind(('', self.clientDataPort)) #0.0.0.0接收所有
+            self.clientDatafd.listen(10)
+            print("cmd_PORT ends\n")
+            self.dataMode = 1
+        except Exception as e:
+            print(str(e))
+
         return
+
+    def cmd_PASV(self):
+        while True:
+            if self.code == "227":
+                print("接受到PASV端口信息\n")
+                try:
+                    self.text.replace('\n', '').replace('\r', '').replace('=', '')
+                    li = self.text.split(',')
+                    self.serverDataIP = li[0]+'.'+li[1]+'.'+li[2]+'.'+li[3]
+                    self.serverDataPort = int(li[4])*256 + int(li[5])
+                    print("ip:", self.serverDataIP,"port:",self.serverDataPort)
+                    self.dataMode = 2
+                    break
+                except Exception as e:
+                    print(str(e))
+                    break 
     
     def cmd_RETR(self):
         print("cmd_RETR begin\n")
-        # 接受一个新连接:
-        self.sock, addr = self.clientDatafd.accept()
-        print("accepted\n")
-        self.downloadFile()
-        self.isStop = False
+        try:
+            if self.dataMode is 1:
+               # 接受一个新连接:
+                self.dataConnectfd, addr = self.clientDatafd.accept()
+            elif self.dataMode is 2:
+                print("in to mode 2\n")
+                self.dataConnectfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.dataConnectfd.connect(('localhost', self.serverDataPort))###
+                print("connected\n")
+            else:
+                return
+            print("accepted\n")
+            self.downloadFile()
+            self.dataConnectfd.close()
+        except Exception as e:
+            print(str(e))
 
+    def cmd_STOR(self):
+        # 接受一个新连接:
+        try:
+            if self.dataMode is 1:
+               # 接受一个新连接:
+                self.dataConnectfd, addr = self.clientDatafd.accept()
+            elif self.dataMode is 2:
+                self.dataConnectfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.dataConnectfd.connect(('localhost', self.serverDataPort))
+            else:
+                return
+            print("accepted\n")
+            self.uploadFile()
+            print("cmd_STOR end\n")
+            self.dataConnectfd.close()
+        except Exception as e:
+            print(str(e))
 
     def downloadFile(self):
         print('download begin\n')
         # filename = os.path.split(self.parameter)[1]
         filename = self.clientFilePath+self.filepath
         print(filename)
-        try:
-            f = open(filename, 'ab+') 
-        except:
-            print("建立文件失败\n")
-            return
-        position = 0
-        print("建立文件成功\n")
+
+        f = open(filename, 'wb+') 
         f.seek(0)
-        print("seek文件成功\n")
         while True:
-            data = self.sock.recv(SIZE)
+            data = self.dataConnectfd.recv(SIZE)
             if not data:
                 print("没接到")
                 break
-            print("接收文件廖\n")
             # time.sleep(0.05)
             f.write(data)
+            print("接收文件廖\n")
             if len(data) < SIZE:
                 break
         f.close()
 
-
-    def cmd_PASV(self):
-        return
-        
 
     def uploadFile(self):
         print('upload begin\n')
@@ -295,23 +271,85 @@ class Client():
             data = f.read(SIZE)
             if not data:
                 break
-            self.sock.send(data)
+            self.dataConnectfd.send(data)
             print("发送文件廖\n")
             time.sleep(0.002)
         f.close()
         print("文件读取结束，已经关闭\n")
 
+    # def connectToServer(self):
+    #     print("connectToserver begin\n")
+    #     host = 'localhost'
+    #     port = 21
+    #     self.username = 'anonymous'
+    #     self.password = 'cathy@com'
+    #     try:
+    #         # host = self.loginwin.ServerIPtext.toPlainText()
+    #         # port = int(self.loginwin.ServerPorttext.toPlainText())
+    #         # self.username = self.loginwin.Usernametext.toPlainText()
+    #         # self.password = self.loginwin.Passwordtext.toPlainText()
+    #         self.checkConnectInput()
+    #     except Exception as e:
+    #         print("exception\n")
+    #         QMessageBox.information(self.loginwin, 'Error', str(e), QMessageBox.Ok)
+    #         return
 
-        
+    #     print(host,port,self.username, self.password)
+    #     try:
+    #         self.clientControlfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #         print("socket success\n")
+    #         self.clientControlfd.connect((host, port))
+    #         self.loginwin.close()   
+    #         print("connect success\n")
+    #         self.login()
+              
+    #         while True:
+    #             self.receiveResponse()
+
+    #     except:
+    #         print("connnect error\n")
+    #         QMessageBox.information(self.loginwin, 'Error', "Connection failed", QMessageBox.Ok)
+
+    # def closeEvent(self):
+    #     self.clientControlfd.close()
+
+    # def login(self):
+    #     self.receiveResponse()
+    #     senddata =  "USER" + ' ' + self.username + '\r\n'
+    #     self.clientControlfd.send(senddata.encode())
+    #     self.receiveResponse()
+    #     senddata =  "PASS" + ' ' + self.password + '\r\n'
+    #     self.clientControlfd.send(senddata.encode()) 
+    #     self.receiveResponse()      
+
+    # def checkConnectInput(self):
+    #     if self.username != "anonymous":
+    #         QMessageBox.information(self.loginwin, 'Error', "Username should be 'anonymous'!", QMessageBox.Ok)
+    #     if '@' not in self.password :
+    #         QMessageBox.information(self.loginwin, 'Error', "Password should be e-mail address!", QMessageBox.Ok)
+
+    def receiveResponse(self):
+        while True:
+            self.resvmsg = self.clientControlfd.recv(SIZE).decode()
+            self.dealToRecv()
+            if not self.resvmsg:
+                break
+            print(self.resvmsg)
+        # self.centralwin.serverresponselist.addItem(msg)
+
+    # def sendCommand(self):
+    #     self.command = self.centralwin.conmandchoose.currentText()
+    #     self.parameter = self.centralwin.parametertext.toPlainText()
+    #     self.ChooseCMD.get(self.command)
+    #     senddata = self.command + ' ' + self.parameter + '\r\n'
+    #     self.clientControlfd.send(senddata.encode())
     
-    def cmd_STOR(self):
-        # 接受一个新连接:
-        self.sock, addr = self.clientDatafd.accept()
-        print("accepted\n")
-        self.uploadFile()
-        print("cmd_STOR end\n")
-        self.isStop = False
+    def cmd_USER(self):
 
+        return
+    
+    def cmd_PASS(self):
+        return
     
     def cmd_QUIT(self):
         return
