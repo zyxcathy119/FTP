@@ -16,6 +16,9 @@ from CentralWindow import Ui_MainWindow
 SIZE = 8190
 
 
+    
+
+
 class Loginwin(QtWidgets.QMainWindow, Ui_LoginWindow):
     def __init__(self):
         super().__init__() #python3继承
@@ -33,19 +36,29 @@ class Centralwin(QtWidgets.QMainWindow, Ui_MainWindow):
 class Client():
 
     clientIP = "127.0.0.1"
-    serverIP = "127.0.0.1"
     clientControlPort = 8000
     clientDataPort = 8001
     clientDatafd = -1
+    clientControlfd = -1
+    clientFilePath ='/home/cathy/FTPCLIENT/'    
+
+    serverControlIP = 'localhost'
     serverControlPort = 21
-    clisock = -1
-    clientFilePath ='/home/cathy/FTPCLIENT/'
-    ServerDataPort = 20
+    serverDataIP = ''
+    serverDataPort = 20
+
     isSignin = False
     isPass = False
+    isStop = False
+    isPasvrecieved = False #server是否发过来了Ip和port
     username = ''
     password = ''
-    ChooseCMD ={}
+    command = ''
+    parameter = ''
+    resvmsg = ''
+    filepath = ''
+    threadcount = 0
+    threads = []
 
 
     def __init__(self):
@@ -61,30 +74,28 @@ class Client():
         # # self.connectToServer()
         # # self.loginwin.SignInbutton.clicked.connect(self.connectToServer)
         # self.centralwin.sendbutton.clicked.connect(self.sendCommand)
-        self.initSocket('localhost',21)
+        self.initSocket(self.serverControlIP,self.serverControlPort)
 
     def initSocket(self,host, port):
         try:
             clisock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             clisock.connect((host, port))
+            # 收
             while True:
                 #   print(clisock.recv(size).decode())
-                msg = clisock.recv(SIZE).decode()
-                if not msg:
-                    break
-                print(msg)
-                command = input("command: ")
-                parameter = input("parameter: ")
-                # self.chooseCMD.get(command)
-                if command == 'PORT':
-                    self.cmd_PORT()
-                if command == 'RETR':
-                    print("intoif\n")
-                    t2=threading.Thread(target = self.cmd_RETR)
-                    t2.start()
-                data = command+' '+parameter + '\r\n'
-                print(data)
-                clisock.send(data.encode())
+                if not self.isStop:
+                    self.resvmsg = clisock.recv(SIZE).decode()
+                    if not self.resvmsg:
+                        break
+                    self.dealToRecv()
+                    print(self.resvmsg)
+                    self.command = input("command: ")
+                    self.parameter = input("parameter: ")
+                    # self.chooseCMD.get(command)
+                    self.dealToCommand()
+                    data = self.command+' '+self.parameter + '\r\n'
+                    print(data)
+                    clisock.send(data.encode())
 
             clisock.close()
         except Exception as e:
@@ -111,7 +122,42 @@ class Client():
     #         'RNTO':self.cmd_RNTO,
     #     }
 
-    
+    def dealToRecv(self):
+        rsv = self.resvmsg.split()
+        code = rsv[0]
+        text = rsv[1]
+
+    def dealToCommand(self):
+        if self.command == 'PORT':
+            self.cmd_PORT()
+            return
+        
+        if self.command == 'RETR':
+            self.isStop = True
+            self.filepath = self.parameter
+            t=threading.Thread(target = self.cmd_RETR)
+            self.threads.append(t)
+            self.threadcount = self.threadcount+1
+            t.start()
+            return
+        
+        if self.command == 'STOR':
+            self.isStop = True
+            self.filepath = self.parameter
+            t=threading.Thread(target = self.cmd_STOR)
+            self.threads.append(t)
+            self.threadcount = self.threadcount+1
+            t.start()            
+            return
+
+        if self.command == 'PASV':
+            self.cmd_PORT()
+            return
+
+        if self.command == 'CWD':
+            self.cmd_PORT()
+            return
+
     def connectToServer(self):
         print("connectToserver begin\n")
         host = 'localhost'
@@ -184,8 +230,8 @@ class Client():
 
     def cmd_PORT(self):
         self.clientIP = self.get_local_ip()
-        self.clientDataPort = 25608
-        self.parameter = self.clientIP.replace('.',',')+',100,8'
+        self.clientDataPort = 25607
+        self.parameter = self.clientIP.replace('.',',')+',100,7'
         self.clientDatafd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.clientDatafd.bind(('', self.clientDataPort))
         self.clientDatafd.listen(10)
@@ -194,22 +240,23 @@ class Client():
     
     def cmd_RETR(self):
         print("cmd_RETR begin\n")
-        while True:
-            # 接受一个新连接:
-            self.sock, addr = self.clientDatafd.accept()
-            print("accepted\n")
-            #创建新线程来处理TCP连接:
-            t = threading.Thread(target=self.downloadFile)
-            t.start()
+        # 接受一个新连接:
+        self.sock, addr = self.clientDatafd.accept()
+        print("accepted\n")
+        self.downloadFile()
+        self.isStop = False
+
 
     def downloadFile(self):
         print('download begin\n')
         # filename = os.path.split(self.parameter)[1]
-        filename = self.clientFilePath+'courses2.cpp'
+        filename = self.clientFilePath+self.filepath
         print(filename)
-        f = open(filename, 'ab') 
-        if not f:
+        try:
+            f = open(filename, 'ab+') 
+        except:
             print("建立文件失败\n")
+            return
         position = 0
         print("建立文件成功\n")
         f.seek(0)
@@ -222,37 +269,49 @@ class Client():
             print("接收文件廖\n")
             # time.sleep(0.05)
             f.write(data)
+            if len(data) < SIZE:
+                break
         f.close()
-        self.sock.send('Goodbye!'.encode())
+
 
     def cmd_PASV(self):
         return
-        #  file = open(absolute_path, mode='wb')
-        # if not file:
-        #     error_msg = "file open or create failure"
-        #     self.response_signal.emit(error_msg)
-        # if self.file_breakpoint > 0:
-        #     file.seek(self.file_breakpoint, 0)
-        # self.file_breakpoint = 0
-        # while 1:
-        #     if self.blocked:
-        #         return
-        #     file_buf = connect_socket.recv(FILE_SIZE)
-        #     if len(file_buf) <= 0:
-        #         self.file_breakpoint = 0
-        #         self.transfer_file = ''
-        #         self.retr_file_signal.emit(100)
-        #         break
-        #     self.file_breakpoint += len(file_buf)
-        #     if len(file_buf) > 0:
-        #         self.retr_file_signal.emit(self.file_breakpoint)
-        #     file.write(file_buf)
-    
+        
+
+    def uploadFile(self):
+        print('upload begin\n')
+        filename = self.clientFilePath+self.filepath
+        print(filename)
+        try:
+            f = open(filename, 'rb+') 
+        except:
+            print("搜索文件失败\n")
+            return
+        print("搜索文件成功\n")
+        f.seek(0)
+        fsize = os.path.getsize(filename)
+        print("seek文件成功\n")
+        while True:
+            data = f.read(SIZE)
+            if not data:
+                break
+            self.sock.send(data)
+            print("发送文件廖\n")
+            time.sleep(0.002)
+        f.close()
+        print("文件读取结束，已经关闭\n")
+
 
         
     
     def cmd_STOR(self):
-        return
+        # 接受一个新连接:
+        self.sock, addr = self.clientDatafd.accept()
+        print("accepted\n")
+        self.uploadFile()
+        print("cmd_STOR end\n")
+        self.isStop = False
+
     
     def cmd_QUIT(self):
         return

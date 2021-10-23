@@ -107,7 +107,7 @@ void recieveCommand(int serfd)
 			如果返回0，表示已到达文件尾或是无可读取的数据，此外文件读写位置会随读取到的字节移动。*/
 			int n = read(client.controlfd, client.rsvCMD + p, SENTENCELENGTH -1 - p); //可能8192装不下，要多收几次
             printf("received message: %s\n",client.rsvCMD);
-			//客户端出现问题，强制退出
+			//客户端出现问题，强制退出！！！！！！！！！！
 			if(strcmp(client.rsvCMD,"exit\r\n") == 0)
 			{
 				closeSocket(client.controlfd);

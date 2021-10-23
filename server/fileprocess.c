@@ -15,6 +15,7 @@ bool downloadfile(struct Client* client, struct FileInfo* file)
     {
         printf("找不到[%s]文件...\n",file->filepath);
         serverReply(client->controlfd, "找不到文件...\n");
+		return false;
     } 
         //获取文件大小
         fseek(fp, 0, SEEK_END);
@@ -45,10 +46,45 @@ bool downloadfile(struct Client* client, struct FileInfo* file)
         //     {
         //         printf("文件发送失败\n");
         //     }
-  
-        
         
         fclose(fp);
+    return true;
+}
+
+bool uploadfile(struct Client* client, struct FileInfo* file)
+{
+    printf("uploadfile begin\n");
+    if(connectDataSocket(client) ==false)
+    {
+        printf("425 发起客户端连接失败\n");
+		serverReply(client->controlfd, "425 发起客户端连接失败\n");
+        return false;
+    }
+    
+    FILE* fp = fopen(file->filepath,"ab+");
+    if(fp == NULL)
+    {
+        printf("无法建立[%s]文件...\n",file->filepath);
+        serverReply(client->controlfd, "451 建立文件失败...\n");
+		return false;
+    } 
+    file->filebuf = calloc(SENTENCELENGTH,sizeof(char));
+    if(file->filebuf == NULL)
+    {
+        printf("内存不足\n");
+        return false;
+    }
+
+    int count;
+    while((count = read(client->datafd,file->filebuf,SENTENCELENGTH)) > 0) {
+        if(fwrite(file->filebuf,sizeof(char), count, fp) <= 0)
+			break;
+        printf("写入文件了\n");
+		if(count <SENTENCELENGTH)
+			break;
+    }
+	printf("文件成功关闭\n");
+    fclose(fp);
     return true;
 }
 

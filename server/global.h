@@ -20,7 +20,7 @@
 
 
 
-#define SENTENCELENGTH 8192
+#define SENTENCELENGTH 8190
 #define MAXPATH  256
 
 enum MsgTag

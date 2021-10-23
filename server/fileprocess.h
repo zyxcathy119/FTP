@@ -4,6 +4,8 @@
 
 bool downloadfile(struct Client* client, struct FileInfo* file);
 
+bool uploadfile(struct Client* client, struct FileInfo* file);
+
 void splitpath(char *path, char *drive, char *dir, char *filename);
 
 bool connectDataSocket(struct Client* client);

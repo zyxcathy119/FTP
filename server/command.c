@@ -56,9 +56,31 @@ void dealtoCMD(struct Client* client)
         strcat(file.filepath, rest);
         if(downloadfile(client, &file))
             printf("Successly download\n");
-        serverReply(client->controlfd, "233 Successly download\n");
+        serverReply(client->controlfd, "226 Successly download\n");
         return;
     }
+
+    if (strcmp(cmd, "STOR") == 0)
+    {
+        struct FileInfo file;
+        if(rest == NULL)
+        {
+            serverReply(client->controlfd, "501 \r\n");
+            return;
+        }
+        strcpy(file.filepath, serRoot);//处理文件路径
+        strcat(file.filepath, rest);
+        if(uploadfile(client, &file))
+        {
+            printf("Successly upload\n");
+            serverReply(client->controlfd, "233 Successly upload\n");
+        }
+        else{
+            printf("upload wrong\n");
+        }
+        return;
+    }
+
     if (strcmp(cmd, "PORT") == 0)
     {
         if(rest == NULL)
